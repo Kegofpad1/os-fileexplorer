@@ -1,5 +1,6 @@
 #include <iostream>
 #include <SDL.h>
+#include <SDL_image.h>
 
 #define WIDTH 800
 #define HEIGHT 600
@@ -15,6 +16,7 @@ int main(int argc, char **argv)
 
     // initializing SDL as Video
     SDL_Init(SDL_INIT_VIDEO);
+    IMG_Init(IMG_INIT_PNG);
 
     // create window and renderer
     SDL_Renderer *renderer;
@@ -35,6 +37,7 @@ int main(int argc, char **argv)
     // clean up
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    IMG_Quit();
     SDL_Quit();
 
     return 0;
