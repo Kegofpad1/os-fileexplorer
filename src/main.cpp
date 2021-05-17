@@ -131,6 +131,7 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     DIR *d;
     struct dirent *dir;
     d = opendir(data_ptr->path); 
+
     int y = 0;
     rect.w = 50;
     rect.h = 50;
@@ -145,6 +146,8 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     int regions;
     std::string prev = getParent(data_ptr->path);
     std::string type;
+
+    //put all items in the /home/<user> directory(including "..") into a vector
     if (d)
     {
         while ((dir = readdir(d)) != NULL)
@@ -171,10 +174,15 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
         }
         closedir(d);
 
+        //sort the list alphabetically
         std::sort(list.begin(), list.end());
     }
+    //used to determine which parts of the window should be clickable
+    //max of 8, correlated with files or directories
     regions = validRegions(list.size());
 
+    
+    //determines what icon should be used for each item in a directory
     for (int i = 0; i < list.size(); i++)
     {
         rect.y = y;
@@ -204,6 +212,7 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     rect.x = 55;
     y = 0;
 
+    //renders the appropriate text for each item in the directory
     for (int i = 0; i < list.size(); i++)
     {
         rect.y = y;
@@ -219,6 +228,7 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     // show rendered frame
     SDL_RenderPresent(renderer);
 
+        //handles clicks on items in the window
         while(click==false)
     {
         click = pollevent(&mouse_x , &mouse_y);
@@ -256,6 +266,8 @@ void quit(AppData *data_ptr)
     TTF_CloseFont(data_ptr->font);
 }
 
+//returns a string with the filepath to the parent directory of the input
+//file path
 std::string getParent(std::string filepath)
 {
     std::string token;
@@ -281,6 +293,7 @@ std::string getParent(std::string filepath)
 
 }
 
+//used for mouse clicks/exiting the window
 bool pollevent(int *x, int *y)
 {
     SDL_Event event;
@@ -306,6 +319,8 @@ bool pollevent(int *x, int *y)
     return false;
 }
 
+//determines how many sections to divide the window into
+//based on the number of items in the directory
 int validRegions(int size){
     if(size >= 8){
         return 8;
@@ -316,6 +331,8 @@ int validRegions(int size){
     }
 }
 
+//determines which region of the screen was clicked
+//used in figuring out what directory/file to open
 int clicked(int x, int y, int regions)
 {
     int result;
@@ -330,6 +347,7 @@ int clicked(int x, int y, int regions)
     }
 }
 
+//used in determining appropriate icon
 std::string getType(std::string target, AppData *data_ptr)
 {
     size_t index = target.rfind(".");
