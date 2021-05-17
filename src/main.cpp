@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <tgmath.h>
 
 #define WIDTH 800
 #define HEIGHT 600
@@ -26,9 +27,12 @@ typedef struct AppData{
     SDL_Texture *video;
     SDL_Texture *code;
     SDL_Texture *other;
+    SDL_Texture *next;
+    SDL_Texture *back;
     SDL_Surface *phrase_surf;
     SDL_Color color;
     char *path;
+    int focus;
 }AppData;
 
 void initialize(SDL_Renderer *renderer, AppData *data_ptr);
@@ -36,7 +40,7 @@ void render(SDL_Renderer *renderer, AppData *data_ptr);
 void quit(AppData *data_ptr);
 std::string getParent(std::string filepath);
 bool pollevent(int *x, int *y);
-int validRegions(int size);
+int validRegions(int size, AppData* data_ptr);
 int clicked(int x, int y, int regions);
 std::string getType(std::string target, AppData* data_ptr);
 
@@ -86,6 +90,8 @@ void initialize(SDL_Renderer *renderer, AppData *data_ptr)
     //Fill in the data for our App_data struct
     data_ptr->font = TTF_OpenFont("resrc/OpenSans-Regular.ttf", 24);
 
+    data_ptr->focus = 0;
+
     data_ptr->path = getenv("HOME");
 
     data_ptr->color ={0,0,0};
@@ -112,6 +118,14 @@ void initialize(SDL_Renderer *renderer, AppData *data_ptr)
 
     img_surf = IMG_Load("resrc/images/video.png");
     data_ptr->video = SDL_CreateTextureFromSurface(renderer, img_surf);
+    SDL_FreeSurface(img_surf);
+
+    img_surf = IMG_Load("resrc/images/next.png");
+    data_ptr->next = SDL_CreateTextureFromSurface(renderer, img_surf);
+    SDL_FreeSurface(img_surf);
+
+    img_surf = IMG_Load("resrc/images/back.png");
+    data_ptr->back = SDL_CreateTextureFromSurface(renderer, img_surf);
     SDL_FreeSurface(img_surf);
 
     data_ptr->phrase_surf = TTF_RenderText_Solid(data_ptr->font, "temp",data_ptr->color);
@@ -150,6 +164,7 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     int regions;
     std::string prev = getParent(data_ptr->path);
     std::string type;
+    int index=0;
 
     //put all items in the /home/<user> directory(including "..") into a vector
     if (d)
@@ -183,14 +198,15 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     }
     //used to determine which parts of the window should be clickable
     //max of 8, correlated with files or directories
-    regions = validRegions(list.size());
+    regions = validRegions(list.size(), data_ptr);
 
     
     //determines what icon should be used for each item in a directory
-    for (int i = 0; i < list.size(); i++)
+    for (int i = 0; i < list.size() - (data_ptr->focus * 8); i++)
     {
         rect.y = y;
-        type = getType(list.at(i), data_ptr);
+        index =i + (data_ptr->focus * 8);
+        type = getType(list.at(index), data_ptr);
 
         if(type == "folder"){
             SDL_RenderCopy(renderer, data_ptr->folder, NULL, &rect);
@@ -215,18 +231,32 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     }
     rect.x = 55;
     y = 0;
+    index =0;
 
     //renders the appropriate text for each item in the directory
-    for (int i = 0; i < list.size(); i++)
+    for (int i = 0; i < list.size() - (data_ptr->focus * 8); i++)
     {
+        index =i + (data_ptr->focus * 8);
         rect.y = y;
-        data_ptr->phrase_surf = TTF_RenderText_Solid(data_ptr->font, list.at(i).c_str(),data_ptr->color);
+        data_ptr->phrase_surf = TTF_RenderText_Solid(data_ptr->font, list.at(index).c_str(),data_ptr->color);
         data_ptr->phrase = SDL_CreateTextureFromSurface(renderer, data_ptr->phrase_surf);
         SDL_QueryTexture(data_ptr->phrase, NULL, NULL, &(rect.w), &(rect.h));
         SDL_RenderCopy(renderer, data_ptr->phrase, NULL, &rect);
         SDL_FreeSurface(data_ptr->phrase_surf); 
         y=y+75;
     }
+
+    rect.h = 100;
+    rect.w = 100;
+    rect.y = 500;
+
+    rect.x = 600;
+    SDL_RenderCopy(renderer, data_ptr->back, NULL, &rect);
+
+    rect.x = 700;
+    SDL_RenderCopy(renderer, data_ptr->next, NULL, &rect);
+
+
 
 
     // show rendered frame
@@ -239,10 +269,42 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
 
         if(click)
         {
-            if(list.at(clicked(mouse_x, mouse_y, regions))=="..")
+            if(clicked(mouse_x, mouse_y, regions) == -1)
             {
-                strcpy(data_ptr->path,prev.c_str());
-                std::cout << data_ptr->path << '\n';
+
+            }
+            else if(clicked(mouse_x, mouse_y, regions) == 8)
+            {
+                if(data_ptr->focus > 0)
+                {
+                    data_ptr->focus = data_ptr->focus -1;
+                }
+            }
+            else if(clicked(mouse_x, mouse_y, regions) == 9)
+            {
+                if (list.size() > 8 && data_ptr->focus < std::ceil(list.size()/8.0)-1)
+                {
+                    data_ptr->focus = data_ptr->focus + 1;
+                }
+                
+            }
+            else if(list.at(clicked(mouse_x, mouse_y, regions) + (data_ptr->focus * 8))=="..")
+            {
+                if(getParent(data_ptr->path) == "/")
+                {
+                    strcpy(data_ptr->path, "/");
+                    data_ptr->focus =0;
+                }
+                else if(getParent(data_ptr->path) == "")
+                {
+
+                }
+                else
+                {
+                    strcpy(data_ptr->path,prev.c_str());
+                    data_ptr->focus =0;
+                    std::cout << data_ptr->path << '\n';
+                }
             }
             else
             {
@@ -251,6 +313,7 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
                     new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions));
                     new_path = data_ptr->path + new_path;
                     strcpy(data_ptr->path,new_path.c_str());
+		    data_ptr->focus =0;
                     std::cout << data_ptr->path << '\n';
 		}else{
 		    new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions));
@@ -259,20 +322,17 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
 		    char *apath = new char[new_path.length() + 1];
 		    strcpy(apath, cpath);
 		    char* arr[] = {"xdg-open", apath, NULL};
+		    data_ptr->focus =0;
 		    int pid = fork();
 		    if (pid == 0) {
 			std::cout << "test";
 			execv("/usr/bin/xdg-open", arr);
-			exit(1); 
-		    }	
+			exit(1);
+		    }
 		}
             }
-           
         }
     }
-    
-   
-
 }
 
 void quit(AppData *data_ptr)
@@ -292,14 +352,26 @@ std::string getParent(std::string filepath)
 {
     std::string token;
     std::istringstream stream(filepath);
-    int i=0;
+    int j=0;
     std::vector<std::string> sub;
     std::string result = "";
+
+    if(filepath =="")
+    {
+        return "";
+    }
 
     while (std::getline(stream, token, '/'))
     {
         sub.push_back(token);
+        j++;
     }
+
+    if (j==2)
+    {
+        return "/";
+    }
+    
 
     for (int i = 0; i < sub.size()-1; i++)
     {
@@ -341,13 +413,15 @@ bool pollevent(int *x, int *y)
 
 //determines how many sections to divide the window into
 //based on the number of items in the directory
-int validRegions(int size){
-    if(size >= 8){
+int validRegions(int size, AppData* data_ptr){
+    int realsize = size -(data_ptr->focus * 8);
+    if(size == 8 ||(data_ptr->focus==0 && realsize > 8))
+    {
         return 8;
     }
     else
     {
-        return size;
+        return realsize;
     }
 }
 
@@ -356,15 +430,23 @@ int validRegions(int size){
 int clicked(int x, int y, int regions)
 {
     int result;
-    result = y/75;
-    if(result<=regions-1)
+    if(x < 600)
     {
-        return result;
+        result = y/75;
+        if(result<=regions-1)
+        {
+            return result;
+        }
     }
-    else
+    else if (x >= 600 && x < 700 && y>499)
     {
-        return -1;
+        return 8;
     }
+    else if(x>= 700 && x < 800 && y>499)
+    {
+        return 9;
+    }
+    return -1;
 }
 
 //used in determining appropriate icon
