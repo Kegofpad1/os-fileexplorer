@@ -9,6 +9,10 @@
 #include <sstream>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdarg.h>
 
 #define WIDTH 800
 #define HEIGHT 600
@@ -228,8 +232,8 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     // show rendered frame
     SDL_RenderPresent(renderer);
 
-        //handles clicks on items in the window
-        while(click==false)
+    //handles clicks on items in the window
+    while(click==false)
     {
         click = pollevent(&mouse_x , &mouse_y);
 
@@ -242,10 +246,26 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
             }
             else
             {
-                new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions));
-                new_path = data_ptr->path + new_path;
-                strcpy(data_ptr->path,new_path.c_str());
-                std::cout << data_ptr->path << '\n';
+		type = getType(list.at(clicked(mouse_x, mouse_y, regions)), data_ptr);
+		if(type == "folder"){
+                    new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions));
+                    new_path = data_ptr->path + new_path;
+                    strcpy(data_ptr->path,new_path.c_str());
+                    std::cout << data_ptr->path << '\n';
+		}else{
+		    new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions));
+		    new_path = data_ptr->path + new_path;
+		    const  char *cpath = new_path.c_str();
+		    char *apath = new char[new_path.length() + 1];
+		    strcpy(apath, cpath);
+		    char* arr[] = {"xdg-open", apath, NULL};
+		    int pid = fork();
+		    if (pid == 0) {
+			std::cout << "test";
+			execv("/usr/bin/xdg-open", arr);
+			exit(1); 
+		    }	
+		}
             }
            
         }
