@@ -43,6 +43,8 @@ bool pollevent(int *x, int *y);
 int validRegions(int size, AppData* data_ptr);
 int clicked(int x, int y, int regions);
 std::string getType(std::string target, AppData* data_ptr);
+std::string getSize(std::string target, AppData *data_ptr, int64_t* size_ptr);
+std::string getPermissions(std::string target, AppData *data_ptr);
 
 int main(int argc, char **argv)
 {
@@ -88,7 +90,7 @@ int main(int argc, char **argv)
 void initialize(SDL_Renderer *renderer, AppData *data_ptr)
 {
     //Fill in the data for our App_data struct
-    data_ptr->font = TTF_OpenFont("resrc/OpenSans-Regular.ttf", 24);
+    data_ptr->font = TTF_OpenFont("resrc/OpenSans-Regular.ttf", 20);
 
     data_ptr->focus = 0;
 
@@ -233,16 +235,51 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     y = 0;
     index =0;
 
+    int size_as_int;
+    int64_t size;
+    std::string bytes;
+    std::string fullsize;
+    std::string permissions;
+
+
     //renders the appropriate text for each item in the directory
     for (int i = 0; i < list.size() - (data_ptr->focus * 8); i++)
     {
         index =i + (data_ptr->focus * 8);
         rect.y = y;
+        type = getType(list.at(index), data_ptr);
+
         data_ptr->phrase_surf = TTF_RenderText_Solid(data_ptr->font, list.at(index).c_str(),data_ptr->color);
         data_ptr->phrase = SDL_CreateTextureFromSurface(renderer, data_ptr->phrase_surf);
         SDL_QueryTexture(data_ptr->phrase, NULL, NULL, &(rect.w), &(rect.h));
         SDL_RenderCopy(renderer, data_ptr->phrase, NULL, &rect);
         SDL_FreeSurface(data_ptr->phrase_surf); 
+
+        if(type != "folder")
+        {
+            bytes = getSize(list.at(index), data_ptr,&size);
+            size_as_int = int(size);
+            fullsize = std::to_string(size_as_int) + " " + bytes;
+            rect.x = 300;
+
+            data_ptr->phrase_surf = TTF_RenderText_Solid(data_ptr->font, fullsize.c_str() ,data_ptr->color);
+            data_ptr->phrase = SDL_CreateTextureFromSurface(renderer, data_ptr->phrase_surf);
+            SDL_QueryTexture(data_ptr->phrase, NULL, NULL, &(rect.w), &(rect.h));
+            SDL_RenderCopy(renderer, data_ptr->phrase, NULL, &rect);
+            SDL_FreeSurface(data_ptr->phrase_surf); 
+
+            permissions = getPermissions(list.at(index), data_ptr);
+
+            rect.x = 400;
+
+            data_ptr->phrase_surf = TTF_RenderText_Solid(data_ptr->font, permissions.c_str() ,data_ptr->color);
+            data_ptr->phrase = SDL_CreateTextureFromSurface(renderer, data_ptr->phrase_surf);
+            SDL_QueryTexture(data_ptr->phrase, NULL, NULL, &(rect.w), &(rect.h));
+            SDL_RenderCopy(renderer, data_ptr->phrase, NULL, &rect);
+            SDL_FreeSurface(data_ptr->phrase_surf); 
+
+        }
+        rect.x =55;
         y=y+75;
     }
 
@@ -262,8 +299,8 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     // show rendered frame
     SDL_RenderPresent(renderer);
 
-    //handles clicks on items in the window
-    while(click==false)
+        //handles clicks on items in the window
+        while(click==false)
     {
         click = pollevent(&mouse_x , &mouse_y);
 
@@ -303,18 +340,18 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
                 {
                     strcpy(data_ptr->path,prev.c_str());
                     data_ptr->focus =0;
-                    std::cout << data_ptr->path << '\n';
+                    //std::cout << data_ptr->path << '\n';
                 }
             }
-            else
+else
             {
 		type = getType(list.at(clicked(mouse_x, mouse_y, regions)), data_ptr);
 		if(type == "folder"){
-                    new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions));
-                    new_path = data_ptr->path + new_path;
-                    strcpy(data_ptr->path,new_path.c_str());
-		    data_ptr->focus =0;
-                    std::cout << data_ptr->path << '\n';
+                new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions) + (data_ptr->focus * 8));
+                new_path = data_ptr->path + new_path;
+                strcpy(data_ptr->path,new_path.c_str());
+                data_ptr->focus =0;
+                //std::cout << data_ptr->path << '\n';
 		}else{
 		    new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions));
 		    new_path = data_ptr->path + new_path;
@@ -334,7 +371,6 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
         }
     }
 }
-
 void quit(AppData *data_ptr)
 {
     SDL_DestroyTexture(data_ptr->folder);
@@ -400,7 +436,6 @@ bool pollevent(int *x, int *y)
 
         case SDL_MOUSEBUTTONDOWN:
             SDL_GetMouseState(x, y);
-            std::cout<< "Mouse was clicked\n";
             return true;
             break;
         
@@ -504,5 +539,94 @@ std::string getType(std::string target, AppData *data_ptr)
         return "other";
     }
 
+}
+
+std::string getSize(std::string target, AppData *data_ptr, int64_t* size_ptr)
+{
+    std::string full = "/" + target;
+    full = data_ptr->path + full;
+
+    struct stat path_stat;
+    stat(full.c_str(), &path_stat);
+    int64_t size = path_stat.st_size;
+    *size_ptr = size;
+    
+
+
+
+
+    if(size > 1073741824)
+    {
+        size = size/1073741824;
+        *size_ptr = size;
+        return "GiB";
+    }
+
+    else if (size > 10480576)
+    {
+        size = size/10480576;
+        *size_ptr = size;
+        return "MiB";
+    }
+        
+    else if(size >= 1024)
+    {
+        size = size/1024;
+        *size_ptr = size;
+        return "KiB";
+    }
+    else 
+    {
+        return "B";
+    }
+
+}
+
+std::string getPermissions(std::string target, AppData *data_ptr)
+{
+    std::string result = "";
+    std::string full = "/" + target;
+    full = data_ptr->path + full;
+
+    struct stat path_stat;
+    stat(full.c_str(), &path_stat);
+
+    if((path_stat.st_mode & S_IRUSR) == 0){result = result + "-";}
+
+    else{result = result + "r";}
+
+    if((path_stat.st_mode & S_IWUSR) == 0){result = result + "-";}
+
+    else{result = result + "w";}
+
+    if((path_stat.st_mode & S_IXUSR) == 0){result = result + "-";}
+
+    else{result = result +"x";}
+
+    if((path_stat.st_mode & S_IRGRP) == 0){result = result + "-";}
+
+    else{result = result + "r";}
+
+    if((path_stat.st_mode & S_IWGRP )== 0){result = result + "-";}
+
+    else{result = result + "w";}
+
+    if((path_stat.st_mode & S_IXGRP) == 0){result = result + "-";}
+
+    else{result = result +"x";}
+
+    if((path_stat.st_mode & S_IROTH) == 0){result = result + "-";}
+
+     else{result = result + "r";}
+
+    if((path_stat.st_mode & S_IWOTH) == 0){result = result + "-";}
+
+    else{result = result + "w";}
+
+    if((path_stat.st_mode & S_IXOTH) == 0){result = result + "-";}
+
+    else{result = result +"x";}
+
+    return result;
 }
 
