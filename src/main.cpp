@@ -1,13 +1,20 @@
 #include <iostream>
+#include <vector>
+#include <string>
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_ttf.h>
+#include <dirent.h>
+#include <algorithm>
+#include <sstream>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define WIDTH 800
 #define HEIGHT 600
 
 typedef struct AppData{
-    TTF_Font * font;
+    TTF_Font *font;
     SDL_Texture *phrase;
     SDL_Texture *folder;
     SDL_Texture *exe;
@@ -15,16 +22,25 @@ typedef struct AppData{
     SDL_Texture *video;
     SDL_Texture *code;
     SDL_Texture *other;
+    SDL_Surface *phrase_surf;
+    SDL_Color color;
+    char *path;
 }AppData;
 
 void initialize(SDL_Renderer *renderer, AppData *data_ptr);
 void render(SDL_Renderer *renderer, AppData *data_ptr);
 void quit(AppData *data_ptr);
+std::string getParent(std::string filepath);
+bool pollevent(int *x, int *y);
+int validRegions(int size);
+int clicked(int x, int y, int regions);
+std::string getType(std::string target, AppData* data_ptr);
 
 int main(int argc, char **argv)
 {
     char *home = getenv("HOME");
     printf("HOME: %s\n", home);
+
 
     // initializing SDL as Video
     SDL_Init(SDL_INIT_VIDEO);
@@ -45,7 +61,7 @@ int main(int argc, char **argv)
     while (event.type != SDL_QUIT)
     {
         //render(renderer);
-        SDL_WaitEvent(&event);
+        //SDL_WaitEvent(&event);
 
         render(renderer, &data);
     }
@@ -65,6 +81,10 @@ void initialize(SDL_Renderer *renderer, AppData *data_ptr)
 {
     //Fill in the data for our App_data struct
     data_ptr->font = TTF_OpenFont("resrc/OpenSans-Regular.ttf", 24);
+
+    data_ptr->path = getenv("HOME");
+
+    data_ptr->color ={0,0,0};
 
     SDL_Surface * img_surf = IMG_Load("resrc/images/folder.png");
     data_ptr->folder = SDL_CreateTextureFromSurface(renderer, img_surf);
@@ -90,14 +110,11 @@ void initialize(SDL_Renderer *renderer, AppData *data_ptr)
     data_ptr->video = SDL_CreateTextureFromSurface(renderer, img_surf);
     SDL_FreeSurface(img_surf);
 
-    SDL_Color color = {0,0,0,};
-    SDL_Surface *phrase_surf = TTF_RenderText_Solid(data_ptr->font, "TEMP",
-    color);
-
-    data_ptr->phrase = SDL_CreateTextureFromSurface(renderer, phrase_surf);
-    SDL_FreeSurface(phrase_surf); 
+    data_ptr->phrase_surf = TTF_RenderText_Solid(data_ptr->font, "temp",data_ptr->color);
     
-
+    data_ptr->phrase = SDL_CreateTextureFromSurface(renderer, data_ptr->phrase_surf);
+    SDL_FreeSurface(data_ptr->phrase_surf); 
+    
 }
 
 void render(SDL_Renderer *renderer, AppData *data_ptr) 
@@ -109,24 +126,123 @@ void render(SDL_Renderer *renderer, AppData *data_ptr)
     // TODO: draw!
     //actually draw images/text(set size, position, ect.)
     SDL_Rect rect;
-    rect.x = 200;
-    rect.y = 100;
-    rect.w = 165;
-    rect.h = 200;
-    SDL_RenderCopy(renderer, data_ptr->folder, NULL, &rect);
 
-    rect.x = 400;
-    rect.y = 300;
-    SDL_RenderCopy(renderer, data_ptr->exe, NULL, &rect);
+    std::vector<std::string> list;
+    DIR *d;
+    struct dirent *dir;
+    d = opendir(data_ptr->path); 
+    int y = 0;
+    rect.w = 50;
+    rect.h = 50;
+    rect.x = 0;
+    rect.y = y;
+    SDL_Event e;
+    int mouse_x =0;
+    int mouse_y =0;
+    bool click = false;
+    std::string new_path;
+    std::string temp = "";
+    int regions;
+    std::string prev = getParent(data_ptr->path);
+    std::string type;
+    if (d)
+    {
+        while ((dir = readdir(d)) != NULL)
+        {
+            for(int i=0; i<strlen(dir->d_name); i++)
+            {
+                if(dir->d_name[i] != ' ')
+                {
+                    temp = temp + dir->d_name[i];
+                }
+            }
+            if(temp == "..")
+            {
+                list.push_back(temp);
+            }
+            
+            else if(dir->d_name[0] != '.')
+            {
+                list.push_back(dir->d_name);
+                
+            }
+            temp = "";
+            
+        }
+        closedir(d);
 
-    SDL_QueryTexture(data_ptr->phrase, NULL, NULL, &(rect.w), &(rect.h));
-    rect.x = 10;
-    rect.y = 500;
-    SDL_RenderCopy(renderer, data_ptr->phrase, NULL, &rect);
+        std::sort(list.begin(), list.end());
+    }
+    regions = validRegions(list.size());
+
+    for (int i = 0; i < list.size(); i++)
+    {
+        rect.y = y;
+        type = getType(list.at(i), data_ptr);
+
+        if(type == "folder"){
+            SDL_RenderCopy(renderer, data_ptr->folder, NULL, &rect);
+
+        }else if (type == "exe")
+        {
+            SDL_RenderCopy(renderer, data_ptr->exe, NULL, &rect);
+        }else if (type == "image")
+        {
+            SDL_RenderCopy(renderer, data_ptr->image, NULL, &rect);
+        }else if (type == "video")
+        {
+            SDL_RenderCopy(renderer, data_ptr->video, NULL, &rect);
+        }else if (type == "code")
+        {
+            SDL_RenderCopy(renderer, data_ptr->code, NULL, &rect);
+        }else
+        {
+            SDL_RenderCopy(renderer, data_ptr->other, NULL, &rect);
+        }
+        y=y+75;
+    }
+    rect.x = 55;
+    y = 0;
+
+    for (int i = 0; i < list.size(); i++)
+    {
+        rect.y = y;
+        data_ptr->phrase_surf = TTF_RenderText_Solid(data_ptr->font, list.at(i).c_str(),data_ptr->color);
+        data_ptr->phrase = SDL_CreateTextureFromSurface(renderer, data_ptr->phrase_surf);
+        SDL_QueryTexture(data_ptr->phrase, NULL, NULL, &(rect.w), &(rect.h));
+        SDL_RenderCopy(renderer, data_ptr->phrase, NULL, &rect);
+        SDL_FreeSurface(data_ptr->phrase_surf); 
+        y=y+75;
+    }
 
 
     // show rendered frame
     SDL_RenderPresent(renderer);
+
+        while(click==false)
+    {
+        click = pollevent(&mouse_x , &mouse_y);
+
+        if(click)
+        {
+            if(list.at(clicked(mouse_x, mouse_y, regions))=="..")
+            {
+                strcpy(data_ptr->path,prev.c_str());
+                std::cout << data_ptr->path << '\n';
+            }
+            else
+            {
+                new_path = "/" + list.at(clicked(mouse_x, mouse_y, regions));
+                new_path = data_ptr->path + new_path;
+                strcpy(data_ptr->path,new_path.c_str());
+                std::cout << data_ptr->path << '\n';
+            }
+           
+        }
+    }
+    
+   
+
 }
 
 void quit(AppData *data_ptr)
@@ -138,5 +254,135 @@ void quit(AppData *data_ptr)
     SDL_DestroyTexture(data_ptr->code);
     SDL_DestroyTexture(data_ptr->other);
     TTF_CloseFont(data_ptr->font);
+}
+
+std::string getParent(std::string filepath)
+{
+    std::string token;
+    std::istringstream stream(filepath);
+    int i=0;
+    std::vector<std::string> sub;
+    std::string result = "";
+
+    while (std::getline(stream, token, '/'))
+    {
+        sub.push_back(token);
+    }
+
+    for (int i = 0; i < sub.size()-1; i++)
+    {
+        
+        result = result + sub.at(i);
+        if(i < sub.size() -2){
+        result = result + "/";
+        }
+    }
+    return result;
+
+}
+
+bool pollevent(int *x, int *y)
+{
+    SDL_Event event;
+
+    if (SDL_PollEvent(&event))
+    {
+        switch (event.type)
+        {
+        case SDL_QUIT:
+            _Exit(0);
+            break;
+
+        case SDL_MOUSEBUTTONDOWN:
+            SDL_GetMouseState(x, y);
+            std::cout<< "Mouse was clicked\n";
+            return true;
+            break;
+        
+        default:
+            break;
+        }
+    }
+    return false;
+}
+
+int validRegions(int size){
+    if(size >= 8){
+        return 8;
+    }
+    else
+    {
+        return size;
+    }
+}
+
+int clicked(int x, int y, int regions)
+{
+    int result;
+    result = y/75;
+    if(result<=regions-1)
+    {
+        return result;
+    }
+    else
+    {
+        return -1;
+    }
+}
+
+std::string getType(std::string target, AppData *data_ptr)
+{
+    size_t index = target.rfind(".");
+    std::string temp;
+    std::string full = "/" + target;
+    full = data_ptr->path + full;
+
+    int dir;
+    struct stat path_stat;
+    stat(full.c_str(), &path_stat);
+    dir = S_ISDIR(path_stat.st_mode);
+
+
+
+    if(dir!=0){
+        return "folder";
+    }
+    else if(target[0] =='.' && target[1] == '.')
+    {
+        return "folder";
+    }
+    else if(index == std::string::npos)
+    {
+        return "other";
+    }
+    else
+    {
+        temp = target.substr(index+1,target.length());
+    }
+
+    if(temp == "exe")
+    {
+        return "exe";
+    }
+
+    else if(temp == "jpg" || temp == "jpeg" || temp == "png" || temp == "tif" || temp == "tiff" || temp == "gif")
+    {
+        return "image";
+    }
+
+    else if(temp == "mp4" || temp == "mov" || temp == "mkv" || temp == "avi" || temp == "webm")
+    {
+        return "video";
+    }
+
+    else if(temp == "h" || temp == "c" || temp == "cpp" || temp == "py" || temp == "java" || temp == "js" )
+    {
+        return "code";
+    }
+    else
+    {
+        return "other";
+    }
+
 }
 
